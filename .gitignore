@@ -1,0 +1,4 @@
+/client/*.user
+/server/build/x64
+/server/build/*.filters
+/server/launcher/res/*.aps

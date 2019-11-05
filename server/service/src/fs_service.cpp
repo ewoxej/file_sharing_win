@@ -1,0 +1,180 @@
+#pragma region Includes
+#include <WinSock2.h>
+#include "fs_service.h"
+#include "ThreadPool.h"
+#include <codecvt>
+#include "rpc_handler.h"
+#pragma endregion
+
+void CFileSharingService::serveClient( SOCKET clSocket )
+{
+	const int bufferSize = 1024;
+	const int indent = 3;
+	SOCKET clientSocket;
+	RequestHandler handler;
+	std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+	handler.setFolderPath( converter.to_bytes( m_filePath ) );
+	clientSocket = clSocket;
+	char buff[bufferSize];
+	send( clientSocket, converter.to_bytes( m_serviceName ).c_str(), sizeof( m_serviceName ), 0 );
+	int bytesRecv = 0;
+	while (bytesRecv != SOCKET_ERROR)
+	{
+		buff[0] = 0;
+		bytesRecv = recv( clientSocket, &buff[0], sizeof( buff ) - 1, 0 );
+		if (bytesRecv > 0)
+		{
+			buff[bytesRecv] = 0;
+		}
+
+		jsonrpcpp::response_ptr resp = handler.parseRequest( buff, clSocket );
+		if (!resp)
+		{
+			strcpy( buff, "error: incorrect request" );
+			send( clientSocket, buff, strlen( buff ), 0 );
+		}
+		else
+		{
+			std::string strRes = resp->result.dump( indent );
+			send( clientSocket, strRes.c_str(), strRes.length(), 0 );
+		}
+	}
+
+	closesocket( clientSocket );
+}
+
+CFileSharingService::CFileSharingService(PWSTR pszServiceName, 
+                               BOOL fCanStop, 
+                               BOOL fCanShutdown, 
+                               BOOL fCanPauseContinue)
+: CServiceBase(pszServiceName, fCanStop, fCanShutdown, fCanPauseContinue)
+{
+    m_fStopping = FALSE;
+
+    // Create a manual-reset event that is not signaled at first to indicate 
+    // the stopped signal of the service.
+    m_hStoppedEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (m_hStoppedEvent == NULL)
+    {
+        throw GetLastError();
+    }
+}
+
+
+CFileSharingService::~CFileSharingService(void)
+{
+    if (m_hStoppedEvent)
+    {
+        CloseHandle(m_hStoppedEvent);
+        m_hStoppedEvent = NULL;
+    }
+}
+
+
+//
+//   FUNCTION: CSampleService::OnStart(DWORD, LPWSTR *)
+//
+//   PURPOSE: The function is executed when a Start command is sent to the 
+//   service by the SCM or when the operating system starts (for a service 
+//   that starts automatically). It specifies actions to take when the 
+//   service starts. In this code sample, OnStart logs a service-start 
+//   message to the Application log, and queues the main service function for 
+//   execution in a thread pool worker thread.
+//
+//   PARAMETERS:
+//   * dwArgc   - number of command line arguments
+//   * lpszArgv - array of command line arguments
+//
+//   NOTE: A service application is designed to be long running. Therefore, 
+//   it usually polls or monitors something in the system. The monitoring is 
+//   set up in the OnStart method. However, OnStart does not actually do the 
+//   monitoring. The OnStart method must return to the operating system after 
+//   the service's operation has begun. It must not loop forever or block. To 
+//   set up a simple monitoring mechanism, one general solution is to create 
+//   a timer in OnStart. The timer would then raise events in your code 
+//   periodically, at which time your service could do its monitoring. The 
+//   other solution is to spawn a new thread to perform the main service 
+//   functions, which is demonstrated in this code sample.
+//
+bool dirExists( const std::wstring& dirName_in )
+{
+	DWORD ftyp = GetFileAttributes( dirName_in.c_str() );
+	if (ftyp == INVALID_FILE_ATTRIBUTES)
+		return false;  //something is wrong with your path!
+
+	if (ftyp & FILE_ATTRIBUTE_DIRECTORY)
+		return true;   // this is a directory!
+
+	return false;    // this is not a directory!
+}
+
+void CFileSharingService::OnStart(DWORD dwArgc, LPWSTR *lpszArgv)
+{
+    // Log a service start message to the Application log.
+    WriteEventLogEntry(L"CppWindowsService in OnStart", 
+        EVENTLOG_INFORMATION_TYPE);
+	parseString( lpszArgv );
+	m_server.connectTo( m_ipAddress, m_port );
+    // Queue the main service function for execution in a worker thread.
+	//ServiceWorkerThread();
+    CThreadPool::QueueUserWorkItem(&CFileSharingService::ServiceWorkerThread, this);
+}
+
+
+//
+//   FUNCTION: CSampleService::ServiceWorkerThread(void)
+//
+//   PURPOSE: The method performs the main function of the service. It runs 
+//   on a thread pool worker thread.
+//
+void CFileSharingService::ServiceWorkerThread(void)
+{
+    // Periodically check if the service is stopping.
+    while (!m_fStopping)
+    {
+		m_server.accept( [this]( SOCKET sk ) {serveClient( sk ); } );
+    }
+
+    // Signal the stopped event.
+    SetEvent(m_hStoppedEvent);
+}
+
+void CFileSharingService::parseString( LPWSTR* inputString )
+{
+	std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+	m_ipAddress = htonl(inet_addr( converter.to_bytes(inputString[1]).c_str() ));
+	m_port = std::stoi( inputString[2] );
+	m_serviceName = inputString[3];
+	m_filePath = inputString[4];
+	if (!dirExists( m_filePath )) throw std::invalid_argument( "Invalid path was provided" );
+}
+
+//
+//   FUNCTION: CSampleService::OnStop(void)
+//
+//   PURPOSE: The function is executed when a Stop command is sent to the 
+//   service by SCM. It specifies actions to take when a service stops 
+//   running. In this code sample, OnStop logs a service-stop message to the 
+//   Application log, and waits for the finish of the main service function.
+//
+//   COMMENTS:
+//   Be sure to periodically call ReportServiceStatus() with 
+//   SERVICE_STOP_PENDING if the procedure is going to take long time. 
+//
+void CFileSharingService::OnStop()
+{
+    // Log a service stop message to the Application log.
+    WriteEventLogEntry(L"CppWindowsService in OnStop", 
+        EVENTLOG_INFORMATION_TYPE);
+
+    // Indicate that the service is stopping and wait for the finish of the 
+    // main service function (ServiceWorkerThread).
+    m_fStopping = TRUE;
+	m_server.setWorking( false );
+	shutdown( m_server.getActiveSocket(), SD_BOTH );
+	closesocket( m_server.getActiveSocket() );
+    if (WaitForSingleObject(m_hStoppedEvent, INFINITE) != WAIT_OBJECT_0)
+    {
+        throw GetLastError();
+    }
+}
