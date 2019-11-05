@@ -4,6 +4,7 @@
 #include "ThreadPool.h"
 #include <codecvt>
 #include "rpc_handler.h"
+#include <registry_helper.hpp>
 #pragma endregion
 
 void CFileSharingService::serveClient( SOCKET clSocket )
@@ -70,32 +71,6 @@ CFileSharingService::~CFileSharingService(void)
     }
 }
 
-
-//
-//   FUNCTION: CSampleService::OnStart(DWORD, LPWSTR *)
-//
-//   PURPOSE: The function is executed when a Start command is sent to the 
-//   service by the SCM or when the operating system starts (for a service 
-//   that starts automatically). It specifies actions to take when the 
-//   service starts. In this code sample, OnStart logs a service-start 
-//   message to the Application log, and queues the main service function for 
-//   execution in a thread pool worker thread.
-//
-//   PARAMETERS:
-//   * dwArgc   - number of command line arguments
-//   * lpszArgv - array of command line arguments
-//
-//   NOTE: A service application is designed to be long running. Therefore, 
-//   it usually polls or monitors something in the system. The monitoring is 
-//   set up in the OnStart method. However, OnStart does not actually do the 
-//   monitoring. The OnStart method must return to the operating system after 
-//   the service's operation has begun. It must not loop forever or block. To 
-//   set up a simple monitoring mechanism, one general solution is to create 
-//   a timer in OnStart. The timer would then raise events in your code 
-//   periodically, at which time your service could do its monitoring. The 
-//   other solution is to spawn a new thread to perform the main service 
-//   functions, which is demonstrated in this code sample.
-//
 bool dirExists( const std::wstring& dirName_in )
 {
 	DWORD ftyp = GetFileAttributes( dirName_in.c_str() );
@@ -108,11 +83,26 @@ bool dirExists( const std::wstring& dirName_in )
 	return false;    // this is not a directory!
 }
 
+bool writeRegistryInfo( wchar_t* argv[] )
+{
+	bool ok = CreateRegistryKey( HKEY_CURRENT_USER, L"Software\\FileSharingService" ); //create key
+	if (ok != TRUE) return FALSE;
+	ok = writeStringInRegistry( HKEY_CURRENT_USER, L"Software\\FileSharingService", L"IP", argv[1] ); //write string
+	if (ok != TRUE) return FALSE;
+	ok = writeStringInRegistry( HKEY_CURRENT_USER, L"Software\\FileSharingService", L"Port", argv[2] ); //write string
+	if (ok != TRUE) return FALSE;
+	ok = writeStringInRegistry( HKEY_CURRENT_USER, L"Software\\FileSharingService", L"ServiceName", argv[3] ); //write string
+	if (ok != TRUE) return FALSE;
+	ok = writeStringInRegistry( HKEY_CURRENT_USER, L"Software\\FileSharingService", L"Path", argv[4] ); //write string
+	if (ok != TRUE) return FALSE;
+}
+
 void CFileSharingService::OnStart(DWORD dwArgc, LPWSTR *lpszArgv)
 {
     // Log a service start message to the Application log.
     WriteEventLogEntry(L"CppWindowsService in OnStart", 
         EVENTLOG_INFORMATION_TYPE);
+	writeRegistryInfo( lpszArgv );
 	parseString( lpszArgv );
 	m_server.connectTo( m_ipAddress, m_port );
     // Queue the main service function for execution in a worker thread.

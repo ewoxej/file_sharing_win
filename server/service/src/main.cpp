@@ -58,7 +58,6 @@ int wmain(int argc, wchar_t *argv[])
         wprintf(L" -remove   to remove the service.\n");
 
         CFileSharingService service(SERVICE_NAME);
-
 		//service.OnStart( argc, argv );
        if (!CServiceBase::Run(service))
         {

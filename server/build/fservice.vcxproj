@@ -74,7 +74,7 @@
     <OutDir>$(SolutionDir)$(Configuration)\</OutDir>
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>..\service\third_party\Microsoft;..\service\third_party\Nlohmann;$(IncludePath)</IncludePath>
+    <IncludePath>..\service\third_party\Microsoft;..\service\third_party\Nlohmann;..\service\third_party\RegistryFunctions;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>$(SolutionDir)$(Configuration)\</OutDir>
@@ -172,6 +172,7 @@
     <ClCompile Include="../service/third_party/Microsoft/ServiceBase.cpp" />
     <ClCompile Include="../service/third_party/Microsoft/ServiceInstaller.cpp" />
     <ClCompile Include="../service/src/socket_serve.cpp" />
+    <ClCompile Include="..\service\third_party\RegistryFunctions\registry_helper.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="../service/third_party/Nlohmann/json.hpp" />
@@ -182,6 +183,7 @@
     <ClInclude Include="../service/third_party/Microsoft/ServiceInstaller.h" />
     <ClInclude Include="../service/src/socket_serve.h" />
     <ClInclude Include="../service/third_party/Microsoft/ThreadPool.h" />
+    <ClInclude Include="..\service\third_party\RegistryFunctions\registry_helper.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

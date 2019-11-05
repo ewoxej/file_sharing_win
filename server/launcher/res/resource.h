@@ -21,6 +21,8 @@
 #define IDB_EXIT                        1008
 #define IDB_RUN                         1008
 #define IDC_STATUS                      1009
+#define IDB_SETTING                     1010
+#define IDB_HELP						1011
 #define IDC_STATIC                      -1
 
 // Next default values for new objects
