@@ -105,18 +105,10 @@ void CFileSharingService::OnStart(DWORD dwArgc, LPWSTR *lpszArgv)
 	writeRegistryInfo( lpszArgv );
 	parseString( lpszArgv );
 	m_server.connectTo( m_ipAddress, m_port );
-    // Queue the main service function for execution in a worker thread.
-	//ServiceWorkerThread();
+
     CThreadPool::QueueUserWorkItem(&CFileSharingService::ServiceWorkerThread, this);
 }
 
-
-//
-//   FUNCTION: CSampleService::ServiceWorkerThread(void)
-//
-//   PURPOSE: The method performs the main function of the service. It runs 
-//   on a thread pool worker thread.
-//
 void CFileSharingService::ServiceWorkerThread(void)
 {
     // Periodically check if the service is stopping.
@@ -139,26 +131,12 @@ void CFileSharingService::parseString( LPWSTR* inputString )
 	if (!dirExists( m_filePath )) throw std::invalid_argument( "Invalid path was provided" );
 }
 
-//
-//   FUNCTION: CSampleService::OnStop(void)
-//
-//   PURPOSE: The function is executed when a Stop command is sent to the 
-//   service by SCM. It specifies actions to take when a service stops 
-//   running. In this code sample, OnStop logs a service-stop message to the 
-//   Application log, and waits for the finish of the main service function.
-//
-//   COMMENTS:
-//   Be sure to periodically call ReportServiceStatus() with 
-//   SERVICE_STOP_PENDING if the procedure is going to take long time. 
-//
 void CFileSharingService::OnStop()
 {
     // Log a service stop message to the Application log.
     WriteEventLogEntry(L"CppWindowsService in OnStop", 
         EVENTLOG_INFORMATION_TYPE);
 
-    // Indicate that the service is stopping and wait for the finish of the 
-    // main service function (ServiceWorkerThread).
     m_fStopping = TRUE;
 	m_server.setWorking( false );
 	shutdown( m_server.getActiveSocket(), SD_BOTH );

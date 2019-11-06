@@ -7,48 +7,34 @@
 #include <tchar.h>
 #include <string>
 #include <registry_helper.hpp>
-
+#include "TrayMenu.h"
+#include "CFileSharingServiceData.h"
 #define SERVICE_NAME             L"FileSharingCustomCppService"
 #define REGISTRY_FS_ROOT L"S-1-5-19\\Software\\FileSharingService"
 
 HINSTANCE hInst;
 
-struct FSServiceData
-{
-	DWORD longIP;
-	UINT port = 800;
-	char serviceName[MAX_PATH];
-	char folderPath[MAX_PATH];
-} g_serviceData;
-
-struct TrayData
-{
-	NOTIFYICONDATA icon;
-	HMENU popMenu;
-} g_trayIconData;
-
-void createTrayIcon( NOTIFYICONDATA& Icon, HMENU& popupMenu, HWND parent );
 INT_PTR APIENTRY DlgProc( HWND hwndDlg, UINT message, WPARAM wParam, LPARAM lParam );
 int GetServiceStatus( TCHAR* name );
+void setOnlyNumbers( HWND hwndControl, BOOL value );
 void editboxEnabling( HWND dlg, BOOL enabled );
 void updateServiceState( TCHAR* servName, HWND item, HWND runItemKey, HWND installItemKey );
 
 LRESULT CALLBACK WndProc( HWND window, UINT message, WPARAM wParam, LPARAM lParam )
 {
+	static TrayMenu tMenu( window, LoadIcon( nullptr, IDI_WINLOGO ), NIF_MESSAGE | NIF_ICON, WM_USER + 1 );
 	switch (message)
 	{
 	case WM_CREATE:
 	{
+		tMenu.addMenuItem( IDB_SETTING, TEXT("Setting") );
+		tMenu.addMenuItem( IDB_HELP, TEXT("Help") );
+		tMenu.addMenuItem( IDB_EXIT, TEXT("Exit") );
 	}
 	break;
 	case WM_USER+1:
 	{
-		POINT pt;
-		GetCursorPos( &pt );
-		if (lParam == WM_RBUTTONDOWN)
-		{
-			TrackPopupMenu( g_trayIconData.popMenu, TPM_LEFTALIGN, pt.x, pt.y, 0, window, nullptr );
-		}
+		tMenu.eventHandler( lParam );
 	}
 	break;
 	case WM_COMMAND:
@@ -74,7 +60,6 @@ LRESULT CALLBACK WndProc( HWND window, UINT message, WPARAM wParam, LPARAM lPara
 	}
 	case WM_DESTROY:
 	{
-		//PostQuitMessage( 0 );
 		break;
 	}
 	default:
@@ -92,62 +77,25 @@ int APIENTRY _tWinMain( HINSTANCE instance, HINSTANCE prevInstance, LPTSTR cmdLi
 	main.lpszClassName = TEXT( "Main" );
 	main.lpfnWndProc = WndProc;
 	RegisterClassEx( &main );
-	GetCurrentDirectoryA( MAX_PATH, g_serviceData.folderPath );
 	HWND window = CreateWindowEx( 0, TEXT( "Main" ), nullptr, 0, 0, 0, 0, 0, nullptr, nullptr, instance, nullptr );
-	createTrayIcon( g_trayIconData.icon, g_trayIconData.popMenu, window );
-	g_serviceData.longIP = MAKEIPADDRESS( 127, 0, 0, 1 );
 	MSG message;
 	while (GetMessage( &message, nullptr, 0, 0 ))
 	{
 		TranslateMessage( &message );
 		DispatchMessage( &message );
 	}
-	Shell_NotifyIcon( NIM_DELETE, &g_trayIconData.icon );
 	return 0;
-}
-
-void initialSet( HWND hwndDlg )
-{
-	LONG style = GetWindowLong( GetDlgItem( hwndDlg, IDC_EDIT3 ), GWL_STYLE );
-	SetWindowLongPtr( GetDlgItem( hwndDlg, IDC_EDIT3 ), GWL_STYLE, style | ES_NUMBER );
-	SendMessage( GetDlgItem( hwndDlg, IDC_EDIT3 ), EM_SETLIMITTEXT, 4, 0 );
-	SendMessage( GetDlgItem( hwndDlg, IDC_EDIT3 ), WM_SETTEXT, 0, reinterpret_cast<LPARAM>(std::to_wstring( g_serviceData.port ).c_str()) );
-	SendMessage( GetDlgItem( hwndDlg, IDC_IPADDRESS1 ), IPM_SETADDRESS, 0, static_cast<LPARAM>(g_serviceData.longIP) );
-	SendMessageA( GetDlgItem( hwndDlg, IDC_EDIT2 ), WM_SETTEXT, 0, reinterpret_cast<LPARAM>(g_serviceData.serviceName) );
-	SetWindowTextA( GetDlgItem( hwndDlg, IDC_EDIT1 ), g_serviceData.folderPath );
-}
-
-void restoreConfig()
-{
-	WCHAR abc[128];
-	std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-	PWCHAR buffer = abc;
-	std::wstring wstr;
-	if (readStringFromRegistry( HKEY_USERS, REGISTRY_FS_ROOT, L"IP", &buffer ))
-	{
-		wstr = std::wstring( buffer );
-		g_serviceData.longIP = std::stoll( wstr );
-	}
-	if (readStringFromRegistry( HKEY_USERS, REGISTRY_FS_ROOT, L"Port", &buffer ))
-	{
-		wstr = std::wstring( buffer );
-		g_serviceData.port = std::stoi( wstr );
-	}
-	if (readStringFromRegistry( HKEY_USERS, REGISTRY_FS_ROOT, L"ServiceName", &buffer ))
-	{
-		wstr = std::wstring( buffer );
-		strcpy( g_serviceData.serviceName, converter.to_bytes( wstr ).c_str() );
-	}
-	if (readStringFromRegistry( HKEY_USERS, REGISTRY_FS_ROOT, L"Path", &buffer ))
-	{
-		wstr = std::wstring( buffer );
-		strcpy( g_serviceData.folderPath, converter.to_bytes( wstr ).c_str() );
-	}
 }
 
 INT_PTR APIENTRY DlgProc( HWND hwndDlg, UINT message, WPARAM wParam, LPARAM lParam )
 {
+	static CFileSharingServiceData data;
+	HWND editPathControl = GetDlgItem( hwndDlg, IDC_EDIT1 );
+	HWND editNameControl = GetDlgItem( hwndDlg, IDC_EDIT2 );
+	HWND editPortControl = GetDlgItem( hwndDlg, IDC_EDIT3 );
+	HWND editIpControl = GetDlgItem( hwndDlg, IDC_IPADDRESS1 );
 	TCHAR buffer[MAX_PATH];
+
 	switch (message)
 	{
 	case WM_INITDIALOG:
@@ -156,10 +104,13 @@ INT_PTR APIENTRY DlgProc( HWND hwndDlg, UINT message, WPARAM wParam, LPARAM lPar
 			GetDlgItem( hwndDlg, IDC_STATUS ),
 			GetDlgItem( hwndDlg, IDB_RUN ),
 			GetDlgItem( hwndDlg, IDB_INSTALL ) );
-		DWORD bufSize = MAX_PATH;
-		GetComputerNameA( g_serviceData.serviceName, &bufSize );
-		restoreConfig();
-		initialSet( hwndDlg );
+		data.restoreConfig(REGISTRY_FS_ROOT);
+		SetWindowText( editPathControl, data.getPath().c_str() );
+		SetWindowText( editNameControl, data.getName().c_str() );
+		SetWindowText( editPortControl, data.getPort().c_str() );
+		setOnlyNumbers( editPortControl, true );
+		SendMessage( editPortControl, EM_SETLIMITTEXT, 5, 0 );
+		SendMessage( editIpControl, IPM_SETADDRESS, 0, static_cast<LPARAM>(data.getIPLong()) );
 		return true;
 	}
 	case WM_COMMAND:
@@ -177,8 +128,9 @@ INT_PTR APIENTRY DlgProc( HWND hwndDlg, UINT message, WPARAM wParam, LPARAM lPar
 			bis.lpfn = nullptr;
 			bis.lParam = reinterpret_cast<LPARAM>(current);
 			LPITEMIDLIST lst = SHBrowseForFolder( &bis );
-			SHGetPathFromIDListA( lst, g_serviceData.folderPath );
-			SetWindowTextA( GetDlgItem( hwndDlg, IDC_EDIT1 ), g_serviceData.folderPath );
+			SHGetPathFromIDList( lst, buffer );
+			data.setFolderPath( buffer );
+			SetWindowText( editPathControl, data.getPath().c_str() );
 		}
 		break;
 		case IDB_INSTALL:
@@ -193,7 +145,6 @@ INT_PTR APIENTRY DlgProc( HWND hwndDlg, UINT message, WPARAM wParam, LPARAM lPar
 				GetDlgItem( hwndDlg, IDC_STATUS ),
 				GetDlgItem( hwndDlg, IDB_RUN ),
 				GetDlgItem( hwndDlg, IDB_INSTALL ) );
-
 		}
 		break;
 		case IDB_RUN:
@@ -208,18 +159,18 @@ INT_PTR APIENTRY DlgProc( HWND hwndDlg, UINT message, WPARAM wParam, LPARAM lPar
 			else
 			{
 				editboxEnabling( hwndDlg, false );
-				const int portArraySize = 5;
-				char cport[portArraySize];
-				SendMessage( GetDlgItem( hwndDlg, IDC_IPADDRESS1 ),
-					IPM_GETADDRESS, 0, LPARAM( &g_serviceData.longIP ) );
-				GetWindowTextA( GetDlgItem( hwndDlg, IDC_EDIT2 ), g_serviceData.serviceName, MAX_PATH );
-				GetWindowTextA( GetDlgItem( hwndDlg, IDC_EDIT3 ), cport, portArraySize );
-				g_serviceData.port = std::stoi( cport );
+				long tempIp = 0;
+				SendMessage( editIpControl,IPM_GETADDRESS, 0, LPARAM( &tempIp ) );
+				data.setIP( tempIp );
+				GetWindowText( editNameControl, buffer, MAX_PATH );
+				data.setServiceName( buffer );
+				GetWindowText( editPortControl, buffer, MAX_PATH );
+				data.setPort( buffer );
 				std::string text = 
-					std::to_string( g_serviceData.longIP ) +
-					" " + std::to_string( g_serviceData.port ) +
-					" " + g_serviceData.serviceName +
-					" " + g_serviceData.folderPath;
+					data.getIPA() +
+					" " + data.getPortA() +
+					" " + data.getNameA() +
+					" " + data.getPathA();
 				std::string query = "sc start " + converter.to_bytes( SERVICE_NAME ) + " " + text;
 				system( query.c_str() );
 			}
@@ -236,25 +187,6 @@ INT_PTR APIENTRY DlgProc( HWND hwndDlg, UINT message, WPARAM wParam, LPARAM lPar
 		break;
 	}
 	return FALSE;
-}
-
-void createTrayIcon(NOTIFYICONDATA& Icon,HMENU& popupMenu,HWND parent)
-{
-	Icon.cbSize = sizeof( NOTIFYICONDATA );
-	Icon.hWnd = parent;
-	Icon.uVersion = NOTIFYICON_VERSION;
-	Icon.uCallbackMessage = WM_USER+1;
-	Icon.hIcon = LoadIcon( nullptr, IDI_WINLOGO );
-	Icon.uFlags = NIF_MESSAGE | NIF_ICON;
-	Shell_NotifyIcon( NIM_ADD, &Icon );
-	popupMenu = CreatePopupMenu();
-	TCHAR strhelp[] = L"Help";
-	TCHAR strset[] = L"Setting";
-	TCHAR strexit[] = L"Exit";
-	AppendMenu( popupMenu, MF_STRING | MF_MOUSESELECT, IDB_SETTING, strset );
-	AppendMenu( popupMenu, MF_STRING | MF_MOUSESELECT, IDB_HELP, strhelp );
-	AppendMenu( popupMenu, MF_STRING | MF_MOUSESELECT, IDB_EXIT, strexit );
-	MSG message;
 }
 
 int GetServiceStatus( TCHAR* name )
@@ -301,27 +233,34 @@ void editboxEnabling( HWND dlg, BOOL enabled )
 void updateServiceState( TCHAR* servName, HWND item, HWND runItemKey, HWND installItemKey )
 {
 	int servStat = GetServiceStatus( servName );
-	std::string msgStat = "Not installed";
-	std::string runItemText = "Run";
-	std::string installItemText = "Unistall";
+	tstring msgStat = TEXT("Not installed");
+	tstring runItemText = TEXT("Run");
+	tstring installItemText = TEXT("Unistall");
 	EnableWindow( runItemKey, true );
 	if (servStat == SERVICE_STOPPED)
 	{
-		msgStat = "Stopped";
+		msgStat = TEXT("Stopped");
 	}
 	else if (servStat == SERVICE_RUNNING)
 	{
-		msgStat = "Running";
-		runItemText = "Stop";
+		msgStat = TEXT("Running");
+		runItemText = TEXT("Stop");
 	}
 	else
 	{
 		EnableWindow( runItemKey, false );
-		installItemText = "Install";
+		installItemText = TEXT("Install");
 	}
-	SetWindowTextA( item, msgStat.c_str() );
-	SetWindowTextA( runItemKey, runItemText.c_str() );
-	SetWindowTextA( installItemKey, installItemText.c_str() );
+	SetWindowText( item, msgStat.c_str() );
+	SetWindowText( runItemKey, runItemText.c_str() );
+	SetWindowText( installItemKey, installItemText.c_str() );
+}
+
+void setOnlyNumbers( HWND hwndControl, BOOL value )
+{
+	LONG style = GetWindowLong( hwndControl, GWL_STYLE );
+	style = (value) ? (style | ES_NUMBER) : (style & ~(ES_NUMBER));
+	SetWindowLongPtr( GetDlgItem( hwndControl, IDC_EDIT3 ), GWL_STYLE, style );
 }
 
 

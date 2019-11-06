@@ -114,6 +114,9 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+    <Manifest>
+      <AdditionalManifestFiles>%(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -153,11 +156,15 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\launcher\res\resource.h" />
+    <ClInclude Include="..\launcher\src\TrayMenu.h" />
     <ClInclude Include="..\service\third_party\RegistryFunctions\registry_helper.hpp" />
+    <ClInclude Include="..\launcher\src\CFileSharingServiceData.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\launcher\src\main.cpp" />
+    <ClCompile Include="..\launcher\src\TrayMenu.cpp" />
     <ClCompile Include="..\service\third_party\RegistryFunctions\registry_helper.cpp" />
+    <ClCompile Include="..\launcher\src\CFileSharingServiceData.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\launcher\res\resources.rc" />
